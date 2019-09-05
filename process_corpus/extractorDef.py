@@ -6,10 +6,10 @@ Created on 23/07/2014
 import argparse
 from lxml import etree as ET
 from collections import OrderedDict, Counter
+from sklearn import preprocessing
 import operator
 import itertools
 import numpy as np
-from sklearn import preprocessing
 import pickle
 import os
 import csv
@@ -18,17 +18,11 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 
 
-
-
-path_casa = '/media/lara/OS/Users/Lara/Google Drive'
-path_ofi = '/home/user/Google Drive'
-path_uso = path_ofi
-
 prep =  ['a', 'ante', 'bajo', 'cabe', 'con', 'contra', 'de', 'desde', 'durante', 'en' , 'entre', 'hacia', 'hasta', 'mediante', 'para', 'por', 'según', 'según'.decode('utf-8'), 'sin', 'so', 'sobre', 'tras', 'versus ', 'vía', 'vía'.decode('utf-8')]
 
 
 
-rolesS1 = {'Ag/caus': 'Actor-Actor-Actor', 'Goal_ag': 'Actor-Agent-Agent', 'Ag_exp': 'Actor-Agent-Agent',
+roles_mapping = {'Ag/caus': 'Actor-Actor-Actor', 'Goal_ag': 'Actor-Agent-Agent', 'Ag_exp': 'Actor-Agent-Agent',
 		   'Ag_source': 'Actor-Agent-Agent', 'Mov-ag_T': 'Actor-Agent-Agent', 'Ag_source(pl)': 'Actor-Agent-Agent',
 		   'Ag(pl)': 'Actor-Agent-Agent',
 		   'Agent': 'Actor-Agent-Agent', 'Measure': 'Undergoer-Attrib-Attrib', 'Ind-caus': 'Actor-Cause-Cause',
@@ -41,7 +35,7 @@ rolesS1 = {'Ag/caus': 'Actor-Actor-Actor', 'Goal_ag': 'Actor-Agent-Agent', 'Ag_e
 		   'Means': 'Undergoer-Instrument-Instrument', 'Source': 'Place-Source-Source',
 		   'Perc': 'Undergoer-Patient-Experiencer', 'Path': 'Place-Place-Place', 'Subst': 'Undergoer-Theme-Theme',
 		   'Af-destr-T': 'Undergoer-Patient-Patient', 'Af-vict-T': 'Undergoer-Patient-Patient',
-		   'Af-T': 'Undergoer-Patient-Patient', 'Af-T(pl)': 'Undergoer-Patient-Patient',	   
+		   'Af-T': 'Undergoer-Patient-Patient', 'Af-T(pl)': 'Undergoer-Patient-Patient',
 		   'Mov-T': 'Undergoer-Theme-Theme', 'T-is': 'Place-Source-Source', 'T-rs': 'Place-Location-Location',
 		   'T': 'Undergoer-Theme-Theme', 'T(pl)': 'Undergoer-Theme-Theme', 'Time-to': 'Time-Final_time-Final_time',
 		   'Time-at': 'Time-Time-Time', 'Time-from': 'Time-Init_time-Init_time'}
@@ -51,7 +45,107 @@ MorfoDic={'Adj':['AdjP','PartSC'],'Adv':['AdvSC','NegAdvP','AdvP','GerSC'],'Pron
 'PP':['PP-Pron','PP-RelPron','PP','PP-AdvSC','PP-RelSC','PP-CondSC','PP-InfSC','PP-IntSC','PP-Comp','PP-PersPron',\
 'PP-ComplSC','sigla-SP-Pr-Int', ],'NP':['NP','InfSC','Proper.Noun'],'Sent':['CondSC','CompP','IntSC','ComplSC','RelPron','RedSC','DirSpSC']}
 
+class argument():
+	def __init__(self):
+		self.abstractRole = ''
+		self.mediumRole = ''
+		self.sensemRole = ''
+		self.synFunct = ''
+		self.synFunctSelectPref = ''
+		self.synCat = ''
+		self.synCatPrep = ''
+		self.synCatCluster = ''
+		self.synCatPrepCluster = ''
+		self.ontoTCO = []
+		self.ontoTCOSplit = []
+		self.ontoSupersense = []
+		self.ontoSupersense = []
+		self.ontoSumo = []
+		self.lemma = []
 
+	def get_roles(self, argument):
+		syntax = a.attrib["fs"] + '_SS'
+
+
+
+class corpus():
+	def __init__(self, corpus_file):
+		self.corpus_file = corpus_file
+		self.sentence_list = []
+		self.sentencedic = {}
+
+	def get_all_sentences(self):
+		'''
+		Parses xml file and selects all nodes
+		:param doc: string, xml doc from which info is gonna be extracted
+		:return: ist of nodes that represent sentences
+		'''
+
+		parser = ET.XMLParser(encoding = 'utf-8')
+		root = ET.parse(self.corpus_file, parser)
+		sentences = root.iter('sentence')
+		for s in sentences:
+			self.sentence_list.append(s)
+
+	def get_sentenceLevel_info(self):
+		for s in self.sentences:
+
+		#prepare for level
+		RolesCon = []
+		RolesMed = []
+		RolesAbs = []
+
+		#sentence info
+		infoFraseL=[]
+
+		#sentence level info
+		sense = s.find(".//lexical").attrib["sense"]
+		vlema = s.find(".//lexical").attrib['verb']
+		ide=s.attrib['id']
+		#print ide
+		perifrastico = s.find(".//lexical[@periphrastic]")
+
+		if 'perif' in tipo_info:
+			infoFraseL.append('p_'+perifrastico.attrib['periphrastic'])
+
+
+		if 'aspectuality' in s.find(".//semantics").attrib:
+			aspectualidad = s.find(".//semantics").attrib['aspectuality']
+			if 'aspectual' in tipo_info:
+				infoFraseL.append(aspectualidad)
+
+
+		if 'modality' in s.find(".//semantics").attrib:
+			modality = s.find(".//semantics").attrib['modality']
+			if 'modal' in tipo_info:
+				infoFraseL.append(modality)
+
+
+
+		if 'polarity' in s.find(".//semantics").attrib:
+			polarity = s.find(".//semantics").attrib['polarity']
+			if 'polar' in tipo_info:
+				infoFraseL.append(polarity)
+
+
+		aspect1 = s.find(".//argumental").attrib['aspect']
+		aspect = 'stative' if aspect1 == 'State' else 'dynamic'
+
+		if 'aspect' in tipo_info:
+			infoFraseL.append(aspect)
+
+		if 'construction' in s.find(".//argumental").attrib:
+			cons1=[]
+			constr = s.find(".//argumental").attrib['construction']
+			if constr != None:
+				constS = constr.split('-')
+				for cc in constS:
+					if cc != '' and cc != ' ':
+						cc=cc.strip()
+						cons1.append(cc)
+			c='*'.join(cons1)
+			if 'const' in tipo_info:
+				infoFraseL.append(c)
 
 def removeLowFrequentFeats(dicOfAllFeatsPerVerb,Minfreq):
 	'''
@@ -69,7 +163,7 @@ def removeLowFrequentFeats(dicOfAllFeatsPerVerb,Minfreq):
 				counter[subcat] += freq
 			else:
 				counter[subcat] = freq
-				
+
 	c2={k:v for k, v in counter.iteritems() if v > Minfreq}
 	return c2, set(c2.keys())
 
@@ -90,27 +184,13 @@ def parseAndSelect(doc):
 		#sense=verbInfo.attrib["sense"]
 		#name='_'.join([verb,sense])
 		#if name in ["abrir_18","cerrar_19","crecer_1","dormir_1","escuchar_1","estar_14","explicar_1","gustar_1","gestionar_1", "montar_2","morir_1", "parecer_1", "pensar_2", "perseguir_1","trabajar_1","valer_1","valorar_2","ver_1","viajar_1","volver_1"]:
-		
-		sentList.append(s)
-
-	return sentList
-
-def allSentences(doc):
-	'''
-	Parses xml file and selects all nodes
-	:param doc: string, xml doc from which info is gonna be extracted
-	:return: ist of nodes that represent sentences
-	'''
-
-	parser = ET.XMLParser(encoding = 'utf-8')
-	root=ET.parse(doc, parser)
-	sentList=[]
-	sentences=root.iter('sentence')
-	for s in sentences:
 
 		sentList.append(s)
 
 	return sentList
+
+
+
 
 
 
@@ -128,11 +208,11 @@ def getGeneralInfo(sentences, grupo_info,tipo_info, nivel, clusters):
 
 	global prep
 
-	
+
 	generalDic={}
 
 	for s in sentences:
-		
+
 		#prepare for level
 		RolesCon = []
 		RolesMed = []
@@ -150,33 +230,33 @@ def getGeneralInfo(sentences, grupo_info,tipo_info, nivel, clusters):
 
 		if 'perif' in tipo_info:
 			infoFraseL.append('p_'+perifrastico.attrib['periphrastic'])
-			
-			
+
+
 		if 'aspectuality' in s.find(".//semantics").attrib:
 			aspectualidad = s.find(".//semantics").attrib['aspectuality']
 			if 'aspectual' in tipo_info:
 				infoFraseL.append(aspectualidad)
-			
-			
+
+
 		if 'modality' in s.find(".//semantics").attrib:
 			modality = s.find(".//semantics").attrib['modality']
 			if 'modal' in tipo_info:
-				infoFraseL.append(modality)			
-			
-			
-			
+				infoFraseL.append(modality)
+
+
+
 		if 'polarity' in s.find(".//semantics").attrib:
 			polarity = s.find(".//semantics").attrib['polarity']
 			if 'polar' in tipo_info:
 				infoFraseL.append(polarity)
-			
-			
+
+
 		aspect1 = s.find(".//argumental").attrib['aspect']
 		aspect = 'stative' if aspect1 == 'State' else 'dynamic'
-		
+
 		if 'aspect' in tipo_info:
 			infoFraseL.append(aspect)
-			
+
 		if 'construction' in s.find(".//argumental").attrib:
 			cons1=[]
 			constr = s.find(".//argumental").attrib['construction']
@@ -184,27 +264,27 @@ def getGeneralInfo(sentences, grupo_info,tipo_info, nivel, clusters):
 				constS = constr.split('-')
 				for cc in constS:
 					if cc != '' and cc != ' ':
-						cc=cc.strip()                       
-						cons1.append(cc)						
+						cc=cc.strip()
+						cons1.append(cc)
 			c='*'.join(cons1)
 			if 'const' in tipo_info:
 				infoFraseL.append(c)
-			
+
 		#argument level info
 		roles=s.findall('.//phr[@rs]')
 		#print 'roles', roles
-		for a in roles:			
+		for a in roles:
 			if a.attrib['arg']=='Argument': #if it is an argument
 				ArgFrase=[]
 
 				#gather role equivalences for the diff levels of abstraction
-				rol1=a.attrib["rs"]				
+				rol1=a.attrib["rs"]
 				if rol1 != '':
 					rolSensem =rol1 +'_SS' #specific
 					RolesCon.append(rolSensem)
-					rolLiricsMed ='-'.join(rolesS1[rol1].split('-')[:2])+'_SS' #medium
+					rolLiricsMed ='-'.join(roles_mapping[rol1].split('-')[:2])+'_SS' #medium
 					RolesMed.append(rolLiricsMed)
-					rolLiricsAbs =rolesS1[rol1].split('-')[0]+'_SS'#abstract
+					rolLiricsAbs =roles_mapping[rol1].split('-')[0]+'_SS'#abstract
 					RolesAbs.append(rolLiricsAbs)				
 				
 					#if the semantic roles are in the info demanded
@@ -788,7 +868,9 @@ def main():
 
 
 	#----start
-	allTags = allSentences(doctag) #todas las frases
+	corpus = Corpus(doctag)
+	corpus.allSentences()
+	allTags = corpus.sentence_list #todas las frases
 	
 	listaClusterSensit = ['syntaxSP', 'morfSPref', 'morfoSPrepSPref']
 
