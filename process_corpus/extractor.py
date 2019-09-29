@@ -1,6 +1,11 @@
+# -*- coding: utf-8 -*-
+import pandas
+import argparse
+import os
+import pickle
 from lxml import etree as ET
 from collections import Counter
-import pandas
+
 
 role_mapping = {'Ag/caus': 'Actor-Actor-Actor', 'Goal_ag': 'Actor-Agent-Agent', 'Ag_exp': 'Actor-Agent-Agent',
            'Ag_source': 'Actor-Agent-Agent', 'Mov-ag_T': 'Actor-Agent-Agent', 'Ag_source(pl)': 'Actor-Agent-Agent',
@@ -20,13 +25,14 @@ role_mapping = {'Ag/caus': 'Actor-Actor-Actor', 'Goal_ag': 'Actor-Agent-Agent', 
            'T': 'Undergoer-Theme-Theme', 'T(pl)': 'Undergoer-Theme-Theme', 'Time-to': 'Time-Final_time-Final_time',
            'Time-at': 'Time-Time-Time', 'Time-from': 'Time-Init_time-Init_time'}
 
-prep = ['a', 'ante', 'bajo', 'cabe', 'con', 'contra', 'de', 'desde', 'durante', 'en' , 'entre', 'hacia', 'hasta', 'mediante', 'para', 'por', 'según', 'según'.decode('utf-8'), 'sin', 'so', 'sobre', 'tras', 'versus ', 'vía', 'vía'.decode('utf-8')]
+prep = ['a', 'ante', 'bajo', 'cabe', 'con', 'contra', 'de', 'desde', 'durante', 'en' , 'entre', 'hacia', 'hasta', 'mediante', 'para', 'por', 'según', 'según', 'sin', 'so', 'sobre', 'tras', 'versus ', 'vía', 'vía']
 
 
 class Argument:
 
-    def __init__(self, argument):
+    def __init__(self, argument, clusters):
         self.argument = argument
+        self.clusters = clusters
         self.abstractRole = ''
         self.mediumRole = ''
         self.sensemRole = ''
@@ -59,13 +65,13 @@ class Argument:
                 words = self.argument.findall('.//word[@core]')
                 for w in words:
                     try:  # retrieve cluster ID of word
-                        clusterID = clusters[w.text.lower().decode('utf-8')]
+                        clusterID = self.clusters[w.text.lower().decode('utf-8')]
                         clustersArgument.append(str(clusterID))
                     except:
                         clustersArgument.append('OOS')  # word was not in embeddings
 
             argumentInfo = '*'.join(clustersArgument)
-            self.synFunctSelectPref = self.argument.attrib["fs"]+'*'+argumentInfo.encode('utf-8')
+            self.synFunctSelectPref = self.argument.attrib["fs"]+'*'+argumentInfo#.decode('utf-8')
 
         except KeyError:
             print('argument does not have syntactic function tag')
@@ -80,23 +86,23 @@ class Argument:
                 preposition = subwords[0].text.lower()  # .decode('UTF-8')
                 if preposition.split('_')[0] in prep:
                     prepoInfo = preposition.split('_')[0]
-                if preposition == 'al':
-                    prepoInfo = 'a'
-                if preposition == 'del':
-                    prepoInfo = 'de'
-            self.synCatPrep = self.argument.attrib["cat"] + '*' + prepoInfo.encode('utf-8')
+                if preposition == u'al':
+                    prepoInfo = u'a'
+                if preposition == u'del':
+                    prepoInfo = u'de'
+            self.synCatPrep = self.argument.attrib["cat"] + '*' + prepoInfo#.encode('utf-8')
 
             clustersArgument = []
             if self.argument.attrib["cat"] in ['NP', 'InfSC']:
                 words = self.argument.findall('.//word[@core]')
                 for w in words:
                     try:  # retrieve cluster ID of word
-                        clusterID = clusters[w.text.lower().decode('utf-8')]
+                        clusterID = self.clusters[w.text.lower().decode('utf-8')]
                         clustersArgument.append(str(clusterID))
                     except:
                         clustersArgument.append('OOS')  # word was not in embeddings
             argumentInfo = '*'.join(clustersArgument)
-            self.synCatCluster = self.argument.attrib["fs"] + '*' + argumentInfo.encode('utf-8')
+            self.synCatCluster = self.argument.attrib["fs"] + '*' + argumentInfo#.decode('utf-8')
 
             self.synCatPrepCluster = self.synCatPrep + argumentInfo
 
@@ -140,8 +146,9 @@ class Argument:
 
 
 class Sentence:
-    def __init__(self, sentence):
+    def __init__(self, sentence, clusters):
         self.sentence = sentence
+        self.clusters = clusters
         self.sense = ''
         self.lemma = ''
         self.ide = ''
@@ -174,8 +181,8 @@ class Sentence:
         if not self.arguments:
             self.get_sentence_info()
 
-        if info_type == 'sentido':
-            key = self.lemma + '_' + self.sense
+        if info_type == 'sense':
+            self.key = self.lemma + '_' + self.sense
 
         if info_type == 'frase':
             self.key = self.lemma + '_' + self.sense + '_' + self.ide
@@ -184,7 +191,7 @@ class Sentence:
         RolesMed = []
         RolesSpec = []
         for arg in self.arguments:
-            argument = Argument(arg)
+            argument = Argument(arg, self.clusters)
             argument.get_roles()
             RolesAbs.append(argument.abstractRole)
             RolesMed.append(argument.mediumRole)
@@ -207,10 +214,17 @@ class Sentence:
 
 
 class Corpus:
-    def __init__(self, info_type):
+    def __init__(self, doc, train_data_doc, test_data_doc, info_type):
 
-        self.sentences = []
+        self.doc = doc
+        self.train_data_doc = train_data_doc
+        self.test_data_doc = test_data_doc
         self.info_type = info_type
+
+        self.train_data = []
+        self.test_data = []
+        self.sentences = []
+
         self.syntactic_info = ''
         self.semantic_info = ''
         self.aspect = False
@@ -220,21 +234,40 @@ class Corpus:
         self.polarity = False
         self.construction = False
 
+        self.concurrences_format = []
+        self.data_type = []
+        self.num = 2
+        self.clusters = ''
+
         self.dicSentenceFeats = {}
         self.dicFeats = {}
         self.dicCons = {}
         self.dicPattern = {}
 
-    def get_sentences(self, doc):
-        root = ET.parse(doc)
+    def get_train_test_data(self):
+        root = ET.parse(self.train_data_doc)
         sentences = root.iter('sentence')
         for s in sentences:
-            sentence = Sentence(s)
+            sentence = Sentence(s, self.clusters)
+            sentence.get_key_for_info_type(self.info_type)
+            self.train_data.append(sentence.key)
+
+        root = ET.parse(self.test_data_doc)
+        sentences = root.iter('sentence')
+        for s in sentences:
+            sentence = Sentence(s, self.clusters)
+            sentence.get_key_for_info_type(self.info_type)
+            self.test_data.append(sentence.key)
+
+    def get_sentences(self):
+        root = ET.parse(self.doc)
+        sentences = root.iter('sentence')
+        for s in sentences:
+            sentence = Sentence(s, self.clusters)
             sentence.get_key_for_info_type(self.info_type)
             self.sentences.append(sentence)
 
     def get_sentence_features(self):
-
         for sentence in self.sentences:
             if sentence.key not in self.dicSentenceFeats:
                 self.dicSentenceFeats[sentence.key] = Counter()
@@ -257,87 +290,85 @@ class Corpus:
             if self.construction:
                 self.dicSentenceFeats[sentence.key].update([sentence.construction])
 
-
     def get_argument_features(self):
-
         for sentence in self.sentences:
             if sentence.key not in self.dicFeats:
                 self.dicFeats[sentence.key] = Counter()
                 self.dicCons[sentence.key] = Counter()
                 self.dicPattern[sentence.key] = Counter()
 
-
             sentenceInfo = []
 
             for arg in sentence.arguments:
+                argument = Argument(arg, self.clusters)
 
                 argInfo = []
 
                 if self.semantic_info:
-                    arg.ontological_info()
+                    argument.ontological_info()
 
                     if self.semantic_info == 'TCO':
-                        self.dicFeats[sentence.key].update([arg.ontoTCO])
-                        argInfo.append(arg.ontoTCO)
+                        self.dicFeats[sentence.key].update([argument.ontoTCO])
+                        argInfo.append(argument.ontoTCO)
 
                     if self.semantic_info == 'TCOsplit':
-                        for feat in arg. ontoTCOSplit:
+                        for feat in argument.ontoTCOSplit:
                             self.dicFeats[sentence.key].update([feat])
                             argInfo.append(feat)
 
                     if self.semantic_info == 'supersense':
-                        self.dicFeats[sentence.key].update([arg.ontoSupersense])
-                        argInfo.append(arg.ontoSupersense)
+                        self.dicFeats[sentence.key].update([argument.ontoSupersense])
+                        argInfo.append(argument.ontoSupersense)
 
                     if self.semantic_info == 'sumo':
-                        self.dicFeats[sentence.key].update([arg.ontoSumo])
-                        argInfo.append(arg.ontoSumo)
+                        self.dicFeats[sentence.key].update([argument.ontoSumo])
+                        argInfo.append(argument.ontoSumo)
 
                     if self.semantic_info == 'lemma':
-                        self.dicFeats[sentence.key].update([arg.lemma])
-                        argInfo.append(arg.lemma)
+                        self.dicFeats[sentence.key].update([argument.lemma])
+                        argInfo.append(argument.lemma)
 
-                    if self.semantic_info == 'semsem':
-                        self.dicFeats[sentence.key].update([arg.sensemRole])
-                        argInfo.append(arg.sensemRole)
+                    if self.semantic_info == 'sensem':
+                        self.dicFeats[sentence.key].update([argument.sensemRole])
+                        argInfo.append(argument.sensemRole)
 
                     if self.semantic_info == 'medium':
-                        self.dicFeats[sentence.key].update([arg.mediumRole])
-                        argInfo.append(arg.mediumRole)
+                        self.dicFeats[sentence.key].update([argument.mediumRole])
+                        argInfo.append(argument.mediumRole)
 
                     if self.semantic_info == 'abstract':
-                        self.dicFeats[sentence.key].update([arg.abstractRole])
-                        argInfo.append(arg.abstractRole)
+                        self.dicFeats[sentence.key].update([argument.abstractRole])
+                        argInfo.append(argument.abstractRole)
 
                 if self.syntactic_info:
-                    arg.get_syntactic_function_info()
+                    argument.get_syntactic_function_info()
 
                     if 'synFunct' in self.syntactic_info:
                         if self.syntactic_info == 'synFunct':
-                            self.dicFeats[sentence.key].update([arg.synFunct])
-                            argInfo.append(arg.synFunct)
+                            self.dicFeats[sentence.key].update([argument.synFunct])
+                            argInfo.append(argument.synFunct)
 
                         if self.syntactic_info == 'synFunctSelectPref':
-                            self.dicFeats[sentence.key].update([arg.synFunctSelectPref])
-                            argInfo.append(arg.synFunctSelectPref)
+                            self.dicFeats[sentence.key].update([argument.synFunctSelectPref])
+                            argInfo.append(argument.synFunctSelectPref)
 
                     if 'synCat' in self.syntactic_info:
-                        arg.get_syntactic_category_info(prep)
+                        argument.get_syntactic_category_info(prep)
                         if self.syntactic_info == 'synCat':
-                            self.dicFeats[sentence.key].update([arg.synCat])
-                            argInfo.append(arg.synCat)
+                            self.dicFeats[sentence.key].update([argument.synCat])
+                            argInfo.append(argument.synCat)
 
                         if self.syntactic_info == 'synCatPrep':
-                            self.dicFeats[sentence.key].update([arg.synCatPrep])
-                            argInfo.append(arg.synCatPrep)
+                            self.dicFeats[sentence.key].update([argument.synCatPrep])
+                            argInfo.append(argument.synCatPrep)
 
                         if self.syntactic_info == 'synCatCluster':
-                            self.dicFeats[sentence.key].update([arg.synCatCluster])
-                            argInfo.append(arg.synCatCluster)
+                            self.dicFeats[sentence.key].update([argument.synCatCluster])
+                            argInfo.append(argument.synCatCluster)
 
                         if self.syntactic_info == 'synCatPrepCluster':
-                            self.dicFeats[sentence.key].update([arg.synCatPrepCluster])
-                            argInfo.append(arg.synCatPrepCluster)
+                            self.dicFeats[sentence.key].update([argument.synCatPrepCluster])
+                            argInfo.append(argument.synCatPrepCluster)
 
                 cons = '+'.join(argInfo)
                 self.dicCons[sentence.key].update([cons])
@@ -345,31 +376,239 @@ class Corpus:
             pat = '+'.join(sentenceInfo)
             self.dicPattern[sentence.key].update([pat])
 
-    def convert_to_matrix(self, concurrences_format, dataType, output_path):
-        data_dic = {}
-        if dataType == 'feats':
-            data_dic = self.dicFeats
-        if dataType == 'cons':
-            data_dic = self.dicCons
-        if dataType == 'pats':
-            data_dic = self.dicPattern
 
-        for key in self.dicSentenceFeats:
-            if key in data_dic:
-                for val in self.dicSentenceFeats:
-                    data_dic[key].update([val])
-            else:
-                data_dic[key] = self.dicSentenceFeats[key]
+    def convert_to_matrix(self, output_path):
+        for type in self.data_type:
+            data_dic = {}
+            if type == 'feats':
+                data_dic = self.dicFeats
+            if type == 'cons':
+                data_dic = self.dicCons
+            if type == 'pats':
+                data_dic = self.dicPattern
+            for key in self.dicSentenceFeats:
+                if key in data_dic:
+                    for val in self.dicSentenceFeats[key]:
+                        data_dic[key].update([val])
+                else:
+                    data_dic[key] = self.dicSentenceFeats[key]
 
-        df = pandas.DataFrame(data_dic).transpose()
-        if concurrences_format == 'bin':
-            df = df.round(1)
-        else:
-            df = df.div(df.sum(axis=1), axis=0)
-        df.to_csv(output_path)
+            df = pandas.DataFrame(data_dic).transpose()
+            if ' ' in df.columns:
+                df.drop(' ', axis=1, inplace=True)
+            if '' in df.columns:
+                df.drop('', axis=1, inplace=True)
+
+            df = df.fillna(0)
+            df = df[df.columns[df.sum(axis=0) > self.num]] # remove feats with freq lower than num
+            test_elements = [i for i in df.index if i in self.test_data]
+            train_elements = [i for i in df.index if i in self.train_data]
+            testDataFrame = df.loc[test_elements]
+            trainDataFrame = df.loc[train_elements]
+
+            # add column for verbs that do not have any feature
+            underrepresentedTest = testDataFrame.sum(axis=1) < 1
+            underrepresentedTest = underrepresentedTest.astype(int)
+            testDataFrame.insert(len(df.columns), 'none', underrepresentedTest.values)
+
+            underrepresentedTrain = df.sum(axis=1) < 1
+            underrepresentedTrain = underrepresentedTrain.astype(int)
+            trainDataFrame.insert(len(df.columns), 'none', underrepresentedTrain.values)
+
+            if 'bin' in self.concurrences_format:
+                trainDataFrame = trainDataFrame.round(1)
+                testDataFrame = testDataFrame.round(1)
+                trainDataFrame.to_csv(os.path.join(output_path, 'training/', 'train.bin.csv'))
+                testDataFrame.to_csv(os.path.join(output_path, 'testNV', 'test.bin.csv'))
+
+            if 'prob' in self.concurrences_format:
+                trainDataFrame = trainDataFrame.div(trainDataFrame.sum(axis=1), axis=0)
+                testDataFrame = testDataFrame.div(testDataFrame.sum(axis=1), axis=0)
+                trainDataFrame.to_csv(os.path.join(output_path, 'training/', 'train.prob.csv'))
+                testDataFrame.to_csv(os.path.join(output_path, 'testNV', 'test.prob.csv'))
 
 
 
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-su', '--supra_arg', nargs='+', choices=['aspect','perif', 'aspectual', 'modal', 'polar', 'const'],
+                        help='Sentence level information')
 
+    parser.add_argument('-se', '--semantic_info',
+                        choices=['TCO', 'TCOsplit', 'sumo', 'lemma', 'supersense', 'abstract', 'medium', 'sensem'],
+                        help='Semantic info to be included')
+
+    parser.add_argument('-sy', '--syntactic_info',
+                        choices=['synFunct', 'synFunctSelecPref', 'synCat', 'synCatPrep', 'synCatCluster', 'synCatPrepCluster'],
+                        help='Syntactic info to be included')
+
+    parser.add_argument('concurrence_type',  nargs='+', choices=['prob', 'bin'],
+                        help='Type of data of the output (prob, bin)')
+
+
+    parser.add_argument('-u', '--unit', choices=['sense', 'lemma', 'frase', 'EAsenseABS', 'EAsenseMED', 'EAsenseSE'],
+                        default='sense', help='Type of unit: sense, lemma, sentence, argument structure (abstract, medium or concrete roles)')
+
+
+    parser.add_argument('data_type',  nargs='+', choices=['feats', 'cons', 'pat'],
+                        help='Type of data of the output (prob, bin)')
+
+    parser.add_argument('-o', '--output', default='../GeneratedData/aspect2/',
+                        help='Output folder for the training/text csv files')
+
+    parser.add_argument('-itest', '--inputTest', default='../RawData/SensemTestTrain/',
+                        help='Input folder for the sensem test part')
+
+    parser.add_argument('-itrain', '--inputTrain', default='../RawData/SensemTestTrain/',
+                        help='Input folder for the sensem train part')
+
+    parser.add_argument('-corpus', '--corpus_file', default='../RawData/sensemMin2.xml', help='Corpus sensem')
+
+    parser.add_argument('-clusters', '--path_clusters', default='../Auxdata/ToUse/bueno/',
+                        help='Folder that contains the different WE to use. Mandatory for "syntaxSP", "morfSPref", "morfoSPrepSPref"')
+
+    args = parser.parse_args()
+    print(args)
+    # main('aspect', 'lemma', 'synCat', 'prob', 'sense', 'feats', 'prueba/', '/home/lara/Documents/CODIGO/clustering/RawData/SensemTestTrain/testVistos5f.xml', '/home/lara/Documents/CODIGO/clustering/RawData/SensemTestTrain/testVistos5f.xml','/home/lara/Documents/CODIGO/clustering/RawData/SensemTestTrain/testVistos5f.xml','/home/lara/Documents/CODIGO/clustering/Auxdata/ToUse/bueno/periodico_100D_w5_min5_100cl.txt')
+
+    # set folders & files
+    outTraining = os.path.join(args.output + 'training/')
+    if not os.path.exists(outTraining):
+        os.makedirs(outTraining)
+
+    outTestNV = os.path.join(args.output + 'testNV/')
+    if not os.path.exists(outTestNV):
+        os.makedirs(outTestNV)
+
+    corpus = Corpus(args.corpus_file, args.inputTrain, args.inputTest, args.unit)
+    corpus.get_train_test_data()
+    corpus.get_sentences()
+
+    if args.supra_arg:
+        if 'aspect' in args.supra_arg:
+            corpus.aspect = True
+        if 'perif' in args.supra_arg:
+            corpus.periph = True
+        if 'aspectual' in args.supra_arg:
+            corpus.aspectuality = True
+        if 'modal' in args.supra_arg:
+            corpus.modality = True
+        if 'polar' in args.supra_arg:
+            corpus.polarity = True
+        if 'const' in args.supra_arg:
+            corpus.construction = True
+        corpus.get_sentence_features()
+    for s in corpus.sentences:
+        #print(s.key)
+        pass
+
+    corpus.semantic_info = args.semantic_info
+    corpus.syntactic_info = args.syntactic_info
+    corpus.concurrences_format = args.concurrence_type
+    #pickled = codecs.open(args.path_clusters, 'r', encoding='utf-8')
+    pickled = open(args.path_clusters, 'rb')
+    corpus.clusters = pickle.load(pickled, encoding='bytes')
+    corpus.data_type = args.data_type
+    corpus.get_argument_features()
+    corpus.convert_to_matrix(args.output)
+
+
+
+'''
+    doctag = args.corpus_file
+    path_clusters = args.path_clusters
+
+    sensesNV = args.input + 'testNoVistos5f.xml'
+    frasesV = args.input + 'testVistos5f.xml'
+    training = args.input + 'training5f.xml'
+
+    # set parameters
+    formato = args.format
+    ListaUmbralMin = args.thresholds
+    dataType = args.data_type
+
+    # adding linguistic feats
+    listaInfo = []
+    if not args.supra_arg == None:
+        for el in args.supra_arg:
+            listaInfo.append(el)
+        formato = 'rasgos'
+        print 'For supra argumental info only isolated features (is) are allowed. Changing {} to is'.format(
+            args.formato)
+
+    listaInfo.append(args.semantic_info)
+    listaInfo.append(args.syntactic_info)
+    listaInfo = filter(None, listaInfo)
+
+    if args.asp:
+        listaInfo.insert(0, 'aspect')
+
+    # ----start
+    corpus = Corpus(doctag)
+    corpus.allSentences()
+    allTags = corpus.sentence_list  # todas las frases
+
+    listaClusterSensit = ['syntaxSP', 'morfSPref', 'morfoSPrepSPref']
+
+    ClustersNeeded = next((True for item in listaClusterSensit if item in listaInfo), False)
+
+    # if selectional preferences were included
+    if ClustersNeeded:
+        for fileCl in os.listdir(path_clusters):
+            print fileCl
+
+            Dclusters = open(path_clusters + fileCl, 'r')
+            clusters = pickle.load(Dclusters)
+
+            for tipoDataset in [(outTraining, training), (outTestNV, sensesNV), (outTestFrasesV, frasesV)]:
+                outDir = tipoDataset[0]
+                fuente = tipoDataset[1]
+
+                relevant = parseAndSelect(fuente)
+                # ----
+
+                dic4tag = getGeneralInfo(allTags, formato, listaInfo, args.unit, clusters)
+
+                for umbralMin in ListaUmbralMin:
+                    reducedDict, setoc = removeLowFrequentFeats(dic4tag, umbralMin)
+
+                    dic = getGeneralInfo(relevant, formato, listaInfo, args.unit, clusters)
+                    nombre = '_'.join(listaInfo)
+                    clInfo = fileCl.split('.')[0]
+                    name = '{0}_{1}_{2}_{3}'.format(nombre, clInfo, umbralMin, formato)
+                    print 'created', name, 'with {0} features in {1}'.format(len(reducedDict), outDir)
+                    to_matrix(setoc, dic, outDir, name, dataType)
+    else:
+        print 'not loading WE clusters'
+        for tipoDataset in [(outTraining, training), (outTestNV, sensesNV), (outTestFrasesV, frasesV)]:
+            outDir = tipoDataset[0]
+            fuente = tipoDataset[1]
+
+            relevant = parseAndSelect(fuente)
+            # ----
+
+            dic4tag = getGeneralInfo(allTags, formato, listaInfo, args.unit, None)
+            # print dic4tag
+
+            for umbralMin in ListaUmbralMin:
+                reducedDict, setoc = removeLowFrequentFeats(dic4tag, umbralMin)
+                # print setoc
+                dic = getGeneralInfo(relevant, formato, listaInfo, args.unit, None)
+                nombre = '_'.join(listaInfo)
+                clInfo = 'noCl'
+                name = '{0}_{1}_{2}_{3}'.format(nombre, clInfo, umbralMin, formato)
+                print 'created', name, 'with {0} features in {1}'.format(len(reducedDict), outDir)
+                to_matrix(setoc, dic, outDir, name, dataType)
+
+'''
+## posibles argumentos para listaInfo:
+## perif aspectuality modality polarity
+## aspect construction
+## syntax syntaxSP
+## morfo morfSPrep morfSPref morfoSPrepSPref
+## tco tco-split sumo lema supersense
+#main(['aspect','syntaxSP'],'patrones',[2,5,10,50,100],path_clusters)
+if __name__ == '__main__':
+    main()
 
