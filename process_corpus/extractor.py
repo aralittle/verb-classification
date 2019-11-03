@@ -65,13 +65,13 @@ class Argument:
                 words = self.argument.findall('.//word[@core]')
                 for w in words:
                     try:  # retrieve cluster ID of word
-                        clusterID = self.clusters[w.text.lower().decode('utf-8')]
+                        clusterID = self.clusters[w.text.lower()]#.encode('utf-8')]
                         clustersArgument.append(str(clusterID))
+                        #print(str(clusterID))
                     except:
                         clustersArgument.append('OOS')  # word was not in embeddings
-
             argumentInfo = '*'.join(clustersArgument)
-            self.synFunctSelectPref = self.argument.attrib["fs"]+'*'+argumentInfo#.decode('utf-8')
+            self.synFunctSelectPref = self.argument.attrib["fs"]+'*'+argumentInfo if clustersArgument != [] else self.argument.attrib["fs"]
 
         except KeyError:
             print('argument does not have syntactic function tag')
@@ -86,25 +86,25 @@ class Argument:
                 preposition = subwords[0].text.lower()  # .decode('UTF-8')
                 if preposition.split('_')[0] in prep:
                     prepoInfo = preposition.split('_')[0]
-                if preposition == u'al':
+                if preposition in [u'al', 'al']:
                     prepoInfo = u'a'
-                if preposition == u'del':
+                if preposition in [u'del', 'del']:
                     prepoInfo = u'de'
-            self.synCatPrep = self.argument.attrib["cat"] + '*' + prepoInfo#.encode('utf-8')
+            self.synCatPrep = self.argument.attrib["cat"] + '*' + prepoInfo if prepoInfo != '' else self.argument.attrib["cat"]
 
             clustersArgument = []
             if self.argument.attrib["cat"] in ['NP', 'InfSC']:
                 words = self.argument.findall('.//word[@core]')
                 for w in words:
                     try:  # retrieve cluster ID of word
-                        clusterID = self.clusters[w.text.lower().decode('utf-8')]
+                        clusterID = self.clusters[w.text.lower()] #
                         clustersArgument.append(str(clusterID))
                     except:
                         clustersArgument.append('OOS')  # word was not in embeddings
             argumentInfo = '*'.join(clustersArgument)
-            self.synCatCluster = self.argument.attrib["fs"] + '*' + argumentInfo#.decode('utf-8')
+            self.synCatCluster = self.argument.attrib["cat"] + '*' + argumentInfo if clustersArgument != [] else self.argument.attrib["cat"]
 
-            self.synCatPrepCluster = self.synCatPrep + argumentInfo
+            self.synCatPrepCluster = self.synCatPrep + '*' + argumentInfo if clustersArgument != [] else self.synCatPrep
 
         except KeyError:
             print('argument does not have syntactic category tag')
@@ -178,6 +178,7 @@ class Sentence:
     def get_key_for_info_type(self, info_type):
         if self.lemma == '':
             self.get_sense_lemma_ID()
+            self.key = self.lemma
         if not self.arguments:
             self.get_sentence_info()
 
@@ -236,7 +237,7 @@ class Corpus:
 
         self.concurrences_format = []
         self.data_type = []
-        self.num = 2
+        self.num = 1
         self.clusters = ''
 
         self.dicSentenceFeats = {}
@@ -301,6 +302,7 @@ class Corpus:
 
             for arg in sentence.arguments:
                 argument = Argument(arg, self.clusters)
+                argument.get_roles()
 
                 argInfo = []
 
@@ -400,7 +402,8 @@ class Corpus:
                 df.drop('', axis=1, inplace=True)
 
             df = df.fillna(0)
-            df = df[df.columns[df.sum(axis=0) > self.num]] # remove feats with freq lower than num
+
+            df = df[df.columns[df.sum(axis=0) >= self.num]] # remove feats with freq lower than num
             test_elements = [i for i in df.index if i in self.test_data]
             train_elements = [i for i in df.index if i in self.train_data]
             testDataFrame = df.loc[test_elements]
@@ -440,7 +443,7 @@ def main():
                         help='Semantic info to be included')
 
     parser.add_argument('-sy', '--syntactic_info',
-                        choices=['synFunct', 'synFunctSelecPref', 'synCat', 'synCatPrep', 'synCatCluster', 'synCatPrepCluster'],
+                        choices=['synFunct', 'synFunctSelectPref', 'synCat', 'synCatPrep', 'synCatCluster', 'synCatPrepCluster'],
                         help='Syntactic info to be included')
 
     parser.add_argument('concurrence_type',  nargs='+', choices=['prob', 'bin'],
@@ -451,7 +454,7 @@ def main():
                         default='sense', help='Type of unit: sense, lemma, sentence, argument structure (abstract, medium or concrete roles)')
 
 
-    parser.add_argument('data_type',  nargs='+', choices=['feats', 'cons', 'pat'],
+    parser.add_argument('data_type',  nargs='+', choices=['feats', 'cons', 'pats'],
                         help='Type of data of the output (prob, bin)')
 
     parser.add_argument('-o', '--output', default='../GeneratedData/aspect2/',
@@ -499,9 +502,7 @@ def main():
         if 'const' in args.supra_arg:
             corpus.construction = True
         corpus.get_sentence_features()
-    for s in corpus.sentences:
-        #print(s.key)
-        pass
+
 
     corpus.semantic_info = args.semantic_info
     corpus.syntactic_info = args.syntactic_info

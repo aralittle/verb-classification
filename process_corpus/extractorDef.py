@@ -857,15 +857,12 @@ def main():
 		formato = 'rasgos'
 		print 'For supra argumental info only isolated features (is) are allowed. Changing {} to is'.format(args.formato)
 
-
 	listaInfo.append(args.semantic_info)
 	listaInfo.append(args.syntactic_info)
 	listaInfo = filter(None, listaInfo)
 
-
 	if args.asp:
 		listaInfo.insert(0, 'aspect')
-
 
 	#----start
 	corpus = Corpus(doctag)
