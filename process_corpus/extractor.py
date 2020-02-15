@@ -507,7 +507,6 @@ def main():
     corpus.semantic_info = args.semantic_info
     corpus.syntactic_info = args.syntactic_info
     corpus.concurrences_format = args.concurrence_type
-    #pickled = codecs.open(args.path_clusters, 'r', encoding='utf-8')
     pickled = open(args.path_clusters, 'rb')
     corpus.clusters = pickle.load(pickled, encoding='bytes')
     corpus.data_type = args.data_type
@@ -516,100 +515,6 @@ def main():
 
 
 
-'''
-    doctag = args.corpus_file
-    path_clusters = args.path_clusters
-
-    sensesNV = args.input + 'testNoVistos5f.xml'
-    frasesV = args.input + 'testVistos5f.xml'
-    training = args.input + 'training5f.xml'
-
-    # set parameters
-    formato = args.format
-    ListaUmbralMin = args.thresholds
-    dataType = args.data_type
-
-    # adding linguistic feats
-    listaInfo = []
-    if not args.supra_arg == None:
-        for el in args.supra_arg:
-            listaInfo.append(el)
-        formato = 'rasgos'
-        print 'For supra argumental info only isolated features (is) are allowed. Changing {} to is'.format(
-            args.formato)
-
-    listaInfo.append(args.semantic_info)
-    listaInfo.append(args.syntactic_info)
-    listaInfo = filter(None, listaInfo)
-
-    if args.asp:
-        listaInfo.insert(0, 'aspect')
-
-    # ----start
-    corpus = Corpus(doctag)
-    corpus.allSentences()
-    allTags = corpus.sentence_list  # todas las frases
-
-    listaClusterSensit = ['syntaxSP', 'morfSPref', 'morfoSPrepSPref']
-
-    ClustersNeeded = next((True for item in listaClusterSensit if item in listaInfo), False)
-
-    # if selectional preferences were included
-    if ClustersNeeded:
-        for fileCl in os.listdir(path_clusters):
-            print fileCl
-
-            Dclusters = open(path_clusters + fileCl, 'r')
-            clusters = pickle.load(Dclusters)
-
-            for tipoDataset in [(outTraining, training), (outTestNV, sensesNV), (outTestFrasesV, frasesV)]:
-                outDir = tipoDataset[0]
-                fuente = tipoDataset[1]
-
-                relevant = parseAndSelect(fuente)
-                # ----
-
-                dic4tag = getGeneralInfo(allTags, formato, listaInfo, args.unit, clusters)
-
-                for umbralMin in ListaUmbralMin:
-                    reducedDict, setoc = removeLowFrequentFeats(dic4tag, umbralMin)
-
-                    dic = getGeneralInfo(relevant, formato, listaInfo, args.unit, clusters)
-                    nombre = '_'.join(listaInfo)
-                    clInfo = fileCl.split('.')[0]
-                    name = '{0}_{1}_{2}_{3}'.format(nombre, clInfo, umbralMin, formato)
-                    print 'created', name, 'with {0} features in {1}'.format(len(reducedDict), outDir)
-                    to_matrix(setoc, dic, outDir, name, dataType)
-    else:
-        print 'not loading WE clusters'
-        for tipoDataset in [(outTraining, training), (outTestNV, sensesNV), (outTestFrasesV, frasesV)]:
-            outDir = tipoDataset[0]
-            fuente = tipoDataset[1]
-
-            relevant = parseAndSelect(fuente)
-            # ----
-
-            dic4tag = getGeneralInfo(allTags, formato, listaInfo, args.unit, None)
-            # print dic4tag
-
-            for umbralMin in ListaUmbralMin:
-                reducedDict, setoc = removeLowFrequentFeats(dic4tag, umbralMin)
-                # print setoc
-                dic = getGeneralInfo(relevant, formato, listaInfo, args.unit, None)
-                nombre = '_'.join(listaInfo)
-                clInfo = 'noCl'
-                name = '{0}_{1}_{2}_{3}'.format(nombre, clInfo, umbralMin, formato)
-                print 'created', name, 'with {0} features in {1}'.format(len(reducedDict), outDir)
-                to_matrix(setoc, dic, outDir, name, dataType)
-
-'''
-## posibles argumentos para listaInfo:
-## perif aspectuality modality polarity
-## aspect construction
-## syntax syntaxSP
-## morfo morfSPrep morfSPref morfoSPrepSPref
-## tco tco-split sumo lema supersense
-#main(['aspect','syntaxSP'],'patrones',[2,5,10,50,100],path_clusters)
 if __name__ == '__main__':
     main()
 
