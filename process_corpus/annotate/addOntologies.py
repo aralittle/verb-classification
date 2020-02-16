@@ -120,10 +120,10 @@ def tag(sensem_object, pathOutput, TCOdic, SUMO):
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-su', '--mappingSUMO', help='Folder containing mappings with SUMO (downloadable from https://github.com/ontologyportal/sumo/tree/master/WordNetMappings)')
-	parser.add_argument('-le', '--lexifiles', help='Fomder containing Wordnet 3.0')
+	parser.add_argument('-le', '--lexifiles', help='Folder containing Wordnet 3.0')
 	parser.add_argument('-mcr', '--mcrfiles', help='MCR folder, downloadable from https://adimen.si.ehu.es/web/MCR')
 	parser.add_argument('-i', '--input', help='Sensem corpus')
-	parser.add_argument('-o', '--output', help='Outpud folder for annotated corpus')
+	parser.add_argument('-o', '--output', help='Output folder for annotated corpus')
 	args = parser.parse_args()
 
 	#Supersenses
