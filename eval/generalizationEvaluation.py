@@ -15,7 +15,7 @@ import argparse
 from scipy.spatial.distance import pdist, cosine, dice, euclidean
 import pickle
 import time
-import Feat_Based2refactored
+import Feat_Based
 
 
 metrics1 = {'cosine': cosine, 'dice': dice}

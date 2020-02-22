@@ -11,7 +11,7 @@ import numpy
 from sklearn import metrics
 from coclust.evaluation.external import accuracy
 import argparse
-moduleF1 = imp.load_source('mod1','../AuxScripts/f1_clustering.py')
+import f1_clustering
 
 
 
